@@ -35,6 +35,7 @@ dependencies:
 - PyF
 - first-class-families
 - singletons
+- MonadRandom
 
 library:
   source-dirs: src

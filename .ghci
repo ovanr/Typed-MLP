@@ -1,0 +1,8 @@
+:set -XDataKinds
+:set -XPolyKinds
+:set -XGADTs
+:set -XScopedTypeVariables
+:set -XTypeApplications
+:set -XTypeOperators
+:set -XTypeFamilies
+:set -XAllowAmbiguousTypes

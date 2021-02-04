@@ -17,18 +17,20 @@ module MLP.Network (
    ArrList(..),
    Weights(..),
    Net(..),
-   fromScalar,
+   scalarR,
+   scalarL,
    MLP(..),
    Learn(..)
 ) where
 
 import Data.Proxy
 import GHC.TypeLits
-import Numeric.LinearAlgebra.Static
+import Numeric.LinearAlgebra.Static hiding (build)
 import Fcf
 import Fcf.Data.List (Snoc)
 import Data.Singletons
 import Data.Kind (Constraint, Type)
+import Control.Monad.Random.Class (MonadRandom(..))
 
 type family AllCon (f :: k -> Constraint) (ks :: [k]) :: Constraint where
    AllCon _1 '[] = () :: Constraint
@@ -36,21 +38,39 @@ type family AllCon (f :: k -> Constraint) (ks :: [k]) :: Constraint where
 
 data ArrList (e :: Nat -> Type) (a :: [Nat]) where
    Nil :: ArrList e '[]
-   Cons :: e o -> ArrList e os -> ArrList e (o ': os)
+   Cons :: KnownNat o => e o -> ArrList e os -> ArrList e (o ': os)
 
 data Weights (i :: Nat) (o :: Nat) = Weights {
    inputs :: L o i,
    bias :: R o
 } deriving Show
 
+rndWeights :: (KnownNat i, KnownNat o, MonadRandom m) => m (Weights i o)
+rndWeights = do
+   (s1,s2) <- (,) <$> getRandom <*> getRandom
+      
+   let w = uniformSample s1 (-1) 1
+       b = unrow $ uniformSample s2 (-1) 1      
+       
+   pure (Weights w b)
+
 data Net (i :: Nat) (hs :: [Nat]) (o :: Nat) where
    SLayer :: Weights i o -> Net i '[] o
    MLayers :: Weights i h -> Net h hs o -> Net i (h ': hs) o
 
-fromScalar :: forall n m. (KnownNat n, KnownNat m) => Double -> L n m
-fromScalar f =
-   let numElems = product . map fromIntegral . fromSing $ sing @'[n, m] 
-     in matrix (replicate numElems f)
+instance AllCon KnownNat (i ': o ': hs) => Show (Net i hs o) where
+   show (SLayer l) = "SLayer " ++ show l
+   show (MLayers l n) = "MLayers " ++ show l ++ "\n" ++ show n
+
+scalarR :: forall n. KnownNat n => Double -> R n
+scalarR d = vector (replicate numElems d)
+   where
+      numElems = fromIntegral . natVal $ Proxy @n
+
+scalarL :: forall n m. (KnownNat n, KnownNat m) => Double -> L n m
+scalarL d = matrix (replicate numElems d)
+   where
+      numElems = product . map fromIntegral . fromSing $ sing @'[n, m] 
 
 class MLP a where
    type Topo a :: [Nat]
@@ -69,6 +89,8 @@ class MLP a where
                => Double -> Arr a i -> Arr a o -> Layer a i o -> Layer a i o
 
 class MLP a => Learn a where
+   build :: MonadRandom m => m a
+
    mkDeltas :: Arr a (DimI a) -> Arr a (DimO a) -> a -> 
                ArrList (Arr a) (Topo a)
    netUpd :: Double -> Arr a (DimI a) -> ArrList (Arr a) (Topo a) -> a -> a
@@ -85,16 +107,20 @@ instance AllCon KnownNat (i ': o ': hs)
    mkOut :: (KnownNat w, KnownNat n) => Weights w n -> R w -> R n
    mkOut l i = inputs l #> i
 
-   layerUpd :: (KnownNat w, KnownNat n) 
+   layerUpd :: (KnownNat w, KnownNat n)
                => Double -> R w -> R n -> Weights w n -> Weights w n
    layerUpd lr i err l = Weights (w * delta) (b * err)
       where
-         delta = fromScalar lr * (err `outer` i)
+         delta = scalarL lr * (err `outer` i)
          w = inputs l
          b = bias l
 
+ 
 instance (KnownNat i, KnownNat o)
          => Learn (Net i '[] o) where
+
+   build :: MonadRandom m => m (Net i '[] o)
+   build = SLayer <$> rndWeights
 
    mkDeltas :: R i -> R o -> Net i '[] o -> ArrList R '[o]
    mkDeltas i o (SLayer l) = Cons (dsn * dso) Nil 
@@ -105,14 +131,16 @@ instance (KnownNat i, KnownNat o)
 
    netUpd :: Double -> R i -> ArrList R '[o] -> Net i '[] o 
              -> Net i '[] o
-   netUpd lr i (Cons delta _) (SLayer l) =
-         SLayer (mkLayer lr i delta l)
+   netUpd lr i (Cons delta _) (SLayer l) = SLayer (mkLayer lr i delta l)
       where
          mkLayer = layerUpd @(Net i '[] o)
 
 instance (AllCon KnownNat (i ': o ': h ': hs),
          Learn (Net h hs o))
          => Learn (Net i (h ': hs) o) where
+
+   build :: forall i h hs o m. (MonadRandom m, KnownNat i, KnownNat h, Learn (Net h hs o)) => m (Net i (h ': hs) o)
+   build = MLayers <$> (rndWeights @i @h) <*> build @(Net h hs o)
 
    mkDeltas :: R i -> R o -> Net i (h ': hs) o
                -> ArrList R (Topo (Net i (h ': hs) o))

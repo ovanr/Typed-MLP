@@ -37,14 +37,14 @@ module MLP.Types (
    hiddenLayers,
    numOutputs,
    topoFold,
-   MLPEnv(..),
+   Env(..),
    dataSet,
    params,
-   MLPState(..),
+   State(..),
    curEpoch,
    curError,
-   MLP,
-   runMLP,
+   App(..),
+   runApp,
    zipWithPat,
    MonadFileSystem(..)
 )  where
@@ -68,13 +68,16 @@ import Control.Monad.State.Class (MonadState)
 import Control.Monad.Trans.Class (MonadTrans)
 import GHC.Generics (Generic)
 import GHC.TypeLits
-import MLP.Network (Net(..), AllCon)
+import MLP.Network (Net(..), AllCon, Learn(..), MLP(..))
+import Data.Singletons (SingI(..))
+import Numeric.Natural
 
 data Pattern (i :: Nat) (o :: Nat) = Pattern {
    _input :: R i,
    _output :: R o
 } deriving Generic
 
+-- rank 2 function
 apply :: (forall n. R n -> R n -> R n) -> Pattern i o -> Pattern i o -> Pattern i o
 apply f (Pattern in1 out1) (Pattern in2 out2) = Pattern (f in1 in2) (f out1 out2)
 
@@ -101,16 +104,16 @@ data DataSet i o = DataSet {
 }
 
 data Topology = Topology {
-   _numInputs :: Int,
-   _hiddenLayers :: [Int],
-   _numOutputs :: Int
+   _numInputs :: Natural,
+   _hiddenLayers :: [Natural],
+   _numOutputs :: Natural
 }
 
 data Parameters = Parameters {
    _topology :: Topology,
    _learningRate :: Float,
    _decayLearningRate :: Bool,
-   _epochs :: Int,
+   _epochs :: Natural,
    _minErrorRate :: Double,
    _normalise :: Bool,
    _trainFile :: FilePath,
@@ -118,14 +121,14 @@ data Parameters = Parameters {
    _verbose :: Bool
 }
 
-data MLPEnv = MLPEnv {
-   _dataSet :: forall i o. (KnownNat i, KnownNat o) => DataSet i o,
+data Env i o = Env {
+   _dataSet :: DataSet i o,
    _params :: Parameters
 }
 
-data MLPState = MLPState {
-   _network :: forall i hs o. AllCon KnownNat (i ': o ': hs) => Net i hs o,
-   _curEpoch :: Int,
+data State i hs o = State {
+   _network :: Net i hs o,
+   _curEpoch :: Natural,
    _curError :: Double
 }
 
@@ -133,24 +136,23 @@ makeLenses ''Pattern
 makeLenses ''DataSet
 makeLenses ''Topology
 
-topoFold :: Fold Topology (Int,Int)
-topoFold = folding $ \s -> let topo = (s ^. numInputs) : (s ^. hiddenLayers) ++ (s ^.. numOutputs)
-                            in zip topo (tail topo)
-   
-makeLenses ''Parameters
-makeLenses ''MLPEnv
-makeLenses ''MLPState
+topoFold :: Fold Topology Natural
+topoFold = folding $ \s -> (s ^. numInputs) : (s ^. hiddenLayers) ++ (s ^.. numOutputs)
 
-newtype MLP a = MLP { unMLP :: RWS MLPEnv T.Text MLPState a }
+makeLenses ''Parameters
+makeLenses ''Env
+makeLenses ''State
+
+newtype App i hs o a = App { unApp :: RWS (Env i o) T.Text (State i hs o) a }
    deriving (Functor, 
              Applicative, 
              Monad,
-             MonadReader MLPEnv, 
+             MonadReader (Env i o), 
              MonadWriter T.Text, 
-             MonadState MLPState)
+             MonadState (State i hs o))
 
-runMLP :: MLP a -> MLPEnv -> MLPState -> (a, MLPState, T.Text)
-runMLP = runRWS . unMLP
+runApp :: App i hs o a -> Env i o -> State i hs o -> (a, State i hs o, T.Text)
+runApp = runRWS . unApp
 
 class (Monad m) => MonadFileSystem m where
    readFileM :: FilePath -> m B.ByteString
@@ -159,7 +161,6 @@ class (Monad m) => MonadFileSystem m where
 instance MonadFileSystem IO where
    readFileM fl = B.readFile fl
    readMatrixM = loadMatrix
-
 
 $(deriveToJSON defaultOptions{fieldLabelModifier=drop 1} ''Topology)
 $(deriveToJSON defaultOptions{fieldLabelModifier=drop 1} ''Parameters)
@@ -190,6 +191,3 @@ instance FromJSON Parameters where
       _verbose <- o .:? "verbose" .!= False
 
       return $ Parameters {..})
-
-
-

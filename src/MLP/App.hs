@@ -1,15 +1,18 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE DataKinds #-}
+
 {-# Language QuasiQuotes #-}
 
-module MLP.MLP (
+module MLP.App (
    run,
    train,
 ) where
 
-import MLP.Types (MLP, params, epochs, minErrorRate, curEpoch, curError, runMLP, topology, dataSet, trainSet, testSet, input, output, weights)
+import MLP.Types
 import Numeric.LinearAlgebra (Vector, R, Matrix, (#>), asRow, flatten, subMatrix, cols)
-import MLP.Config (readEnv, makeState)
+import MLP.Config (readConf, mkDataSet, mkState)
 import Control.Lens (view, use, (+=), (^.), (.=))
 import Control.Monad (when, forM_, forM)
 import qualified Data.Vector.Storable as V (snoc, sum)
@@ -18,49 +21,31 @@ import qualified Data.Vector.Storable as V (snoc, sum)
 import Control.Monad.Writer.Class (tell)
 import PyF (fmt)
 import qualified Data.Text.Lazy.IO as TIO (putStrLn)
+import Data.Singletons
+import Numeric.Natural
 
 run :: FilePath -> IO ()
-run config = do
-   env <- readEnv config
-   let state = makeState (env ^. params.topology)
-   let (_,resultState,log) = runMLP train env state
-   TIO.putStrLn log
+run fl = do
+   conf <- readConf fl
+   let i = conf ^. topology.numInputs
+       hs = conf ^. topology.hiddenLayers
+       o = conf ^. topology.numOutputs
 
-data ForwardPass (a :: [Nat]) where
-   Nil :: ForwardPass '[]
-   Outputs :: R o -> ForwardPass os -> ForwardPass (o ': os)
-
-forwardPass :: R i -> MLPNetwork i o -> ForwardPass os
-forwardPass = scanl calcOutput
-   where
-      calcOutput :: R i -> L o i -> R o
-      calcOutput inVec weightLayer = weightLayer #> inVec
-
-backwardPass :: [Vector R] -> Vector R -> [Matrix R] -> [Vector R]
-backwardPass outputs expOut weightList = 
-   reverse $ lastLayerDeltas : restDeltas 
-
-   where
-      lastLayerDeltas :: Vector R
-      lastLayerDeltas = (last outputs - expOut) * calcDerivSigmoidNet (last outputs)
-      restDeltas :: [Vector R]
-      restDeltas = scanl calcDeltas lastLayerDeltas $ zip (reverse weightList) (reverse . init $ outputs)
-      calcDerivSigmoidNet :: Vector R -> Vector R
-      calcDerivSigmoidNet vec = vec*(1-vec)
-      calcDeltas :: Vector R -> (Matrix R, Vector R) -> Vector R
-      calcDeltas deltas (weight,output) = reduce (asRow deltas <> weight) * calcDerivSigmoidNet output
-      reduce :: Matrix R -> Vector R
-      reduce matrix = flatten $ subMatrix (0,0) (1,cols matrix - 1) matrix
-
-
-updateWeights :: [Vector R] -> MLP ()
-updateWeights x = return ()
+   case toSing i of
+      SomeSing (_ :: Sing i) -> 
+         case toSing hs of
+            SomeSing (_ :: Sing hs) ->
+               case toSing o of
+                  SomeSing (_ :: Sing o) -> do
+                     let dt = mkDataSet @i @o conf
+                     let st = mkState @i @hs @o
+                     TIO.putStrLn ""
 
 
 calculateError :: Vector R -> Vector R -> Double
 calculateError expOut actOut = V.sum ((expOut - actOut) ** 2) / 2
 
-trainOnSet :: MLP Double
+trainOnSet :: App i hs o Double
 trainOnSet = do
    trainset <- view (dataSet.trainSet)
    weights <- use weights
@@ -78,7 +63,7 @@ trainOnSet = do
    return $ sum errorRates
 
 
-evaluateOnSet :: MLP ()
+evaluateOnSet :: App i hs o ()
 evaluateOnSet = do
    testset <- view (dataSet.testSet)
    weights <- use weights
@@ -90,7 +75,7 @@ evaluateOnSet = do
 
    return ()
 
-loop :: MLP () -> MLP ()
+loop :: App i hs o () -> App i hs o ()
 loop trainAction = do
    epochTotal <- view (params.epochs)
    epochNow <- use curEpoch
@@ -104,8 +89,7 @@ loop trainAction = do
       when (curError > minError) $ do
          loop trainAction
 
-
-train :: MLP ()
+train :: App i hs o ()
 train = do
    tell "Starting Training process..."
    

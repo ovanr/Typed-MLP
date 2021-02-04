@@ -19,8 +19,8 @@ import Data.Singletons
 import Data.Maybe (mapMaybe)
 
 
-toPat :: forall i o. (KnownNat i, KnownNat o) => Matrix R -> Either T.Text [Pattern i o]
-toPat m 
+toPat :: forall i o. (KnownNat i, KnownNat o) => Matrix R -> Either String [Pattern i o]
+toPat m
    | cols m == (dimI + dimO) = Right $ zipWith Pattern is os
    | otherwise = Left "Mismatch on number of columns"
 
