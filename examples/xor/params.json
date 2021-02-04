@@ -1,0 +1,15 @@
+{
+   "topology": {
+      "numInputs": 2,
+      "hiddenLayers": [3,2],
+      "numOutputs": 1
+   },
+   "learningRate": 0.7,
+   "decayLearningRate": true,
+   "minErrorRate": 0.001,
+   "normalise": false,
+   "trainFile": "train.txt",
+   "testFile": "test.txt",
+   "verbose": true
+}
+

@@ -21,6 +21,20 @@ description:         Please see the README on GitHub at <https://github.com/ovan
 
 dependencies:
 - base >= 4.7 && < 5
+- lens
+- text
+- containers
+- bytestring
+- aeson
+- lens-aeson
+- hmatrix
+- vector
+- mtl
+- transformers
+- filepath
+- PyF
+- first-class-families
+- singletons
 
 library:
   source-dirs: src
