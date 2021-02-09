@@ -4,11 +4,13 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3d3ef9e0e4aa3b2b07cadb8459257bde9951e6d64ea3768e881f15928c834762
+-- hash: 6c70ee6d3bb8a9c0c4d6a8c88bbfa1301382525fe15d18e73b5c271d51d2439a
 
 name:           mlp-hs
 version:        0.1.0.0
+synopsis:       A dependently typed MLP network
 description:    Please see the README on GitHub at <https://github.com/ovanr/mlp-hs#readme>
+category:       Web
 homepage:       https://github.com/ovanr/mlp-hs#readme
 bug-reports:    https://github.com/ovanr/mlp-hs/issues
 author:         Orpheas van Rooij
@@ -57,7 +59,7 @@ library
     , vector
   default-language: Haskell2010
 
-executable mlp-hs-exe
+executable mlp-hs
   main-is: Main.hs
   other-modules:
       Paths_mlp_hs
@@ -92,7 +94,7 @@ test-suite mlp-hs-test
       Paths_mlp_hs
   hs-source-dirs:
       test
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -threaded -rtsopts -O3 -with-rtsopts=-N
   build-depends:
       MonadRandom
     , PyF

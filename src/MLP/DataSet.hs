@@ -15,7 +15,7 @@ import qualified Data.Vector.Storable as V
 import qualified Data.Text as T
 import Control.Monad (when)
 import GHC.TypeLits (KnownNat)
-import Data.Singletons
+import Data.Singletons ( SingI(sing), SingKind(fromSing) )
 import Data.Maybe (mapMaybe)
 
 

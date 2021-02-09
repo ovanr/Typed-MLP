@@ -32,7 +32,7 @@ import Control.Monad.Random.Class (MonadRandom)
 liftEither :: (MonadFail m) => Either String b -> m b
 liftEither = either fail pure
 
-readConf :: (MonadFail m, MonadFileSystem m) => FilePath -> m Parameters
+readConf :: MonadFileSystem m => FilePath -> m Parameters
 readConf fl = do
    s <- liftEither . eitherDecode =<< readFileM fl
    pure $ s & trainFile %~ absPath
@@ -42,11 +42,16 @@ readConf fl = do
       (base,_) = splitFileName fl
       absPath x = base </> takeFileName x
    
-mkDataSet :: (KnownNat i, KnownNat o) => (MonadFail m, MonadFileSystem m) => Parameters -> m (DataSet i o)
+mkDataSet :: (KnownNat i, KnownNat o, MonadFileSystem m) => Parameters -> m (DataSet i o)
 mkDataSet p = do
       trainSet <- mkPat (p ^. trainFile)
       testSet <- mkPat (p ^. testFile)
-
-      return $ DataSet trainSet testSet
+   
+      return $
+         if norm then
+            DataSet (normPat trainSet) (normPat testSet)
+         else
+            DataSet trainSet testSet
    where
       mkPat fl = readMatrixM fl >>= liftEither . toPat
+      norm = p ^. normalise 

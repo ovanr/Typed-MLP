@@ -11,8 +11,8 @@ extra-source-files:
 - ChangeLog.md
 
 # Metadata used when publishing your package
-# synopsis:            Short description of your package
-# category:            Web
+synopsis:            A dependently typed MLP network
+category:            Web
 
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
@@ -42,7 +42,7 @@ library:
   source-dirs: src
 
 executables:
-  mlp-hs-exe:
+  mlp-hs:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -59,6 +59,7 @@ tests:
     ghc-options:
     - -threaded
     - -rtsopts
+    - -O3
     - -with-rtsopts=-N
     dependencies:
     - mlp-hs

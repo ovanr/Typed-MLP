@@ -63,23 +63,18 @@ import qualified Data.Text.Lazy as T
 import Data.Functor.Identity (Identity)
 import Data.Text.Lazy.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.ByteString.Lazy as B
-import Control.Monad.Writer.Class (MonadWriter)
-import Control.Monad.Reader.Class (MonadReader)
-import Control.Monad.State.Class (MonadState)
-import Control.Monad.Trans.Class (MonadTrans)
-import GHC.Generics (Generic)
-import GHC.TypeLits
+import Control.Monad.Writer.Class (MonadWriter(..))
+import Control.Monad.State.Class (MonadState(..))
+import GHC.TypeLits ( KnownNat, Nat )
 import MLP.Network (Net(..), AllCon, Learn(..), MLP(..))
 import Data.Singletons (SingI(..))
-import Numeric.Natural
+import Numeric.Natural ( Natural )
+import qualified Data.Text.Lazy.IO as TIO (putStrLn)
 
 data Pattern (i :: Nat) (o :: Nat) = Pattern {
    _input :: R i,
    _output :: R o
-}
-
-instance (KnownNat i, KnownNat o) => Show (Pattern i o) where
-   show (Pattern i o) = "Pattern " ++ show i ++ show o
+} deriving Show
 
 -- rank 2 function
 apply :: (forall n. R n -> R n -> R n) -> Pattern i o -> Pattern i o -> Pattern i o
@@ -143,23 +138,26 @@ topoFold = folding $ \s -> (s ^. numInputs) : (s ^. hiddenLayers) ++ (s ^.. numO
 makeLenses ''Parameters
 makeLenses ''State
 
-newtype App i hs o a = App { unApp :: StateT (State i hs o) (Writer T.Text) a }
-   deriving (Functor, 
-             Applicative, 
-             Monad,
-             MonadWriter T.Text,
-             MonadState (State i hs o))
+newtype App (i :: Nat) (hs :: [Nat]) (o :: Nat) (a :: *) = App {
+   unApp :: StateT (State i hs o) (Writer T.Text) a 
+} deriving (Functor,
+            Applicative,
+            Monad,
+            MonadWriter T.Text,
+            MonadState (State i hs o))
 
 runApp :: App i hs o a -> State i hs o -> ((a, State i hs o), T.Text)
 runApp app = runWriter . runStateT (unApp app)
 
-class (Monad m) => MonadFileSystem m where
+class (Monad m, MonadFail m) => MonadFileSystem m where
    readFileM :: FilePath -> m B.ByteString
    readMatrixM :: FilePath -> m (Matrix Double)
+   printText :: T.Text -> m ()
 
 instance MonadFileSystem IO where
    readFileM fl = B.readFile fl
    readMatrixM = loadMatrix
+   printText = TIO.putStrLn
 
 $(deriveToJSON defaultOptions{fieldLabelModifier=drop 1} ''Topology)
 $(deriveToJSON defaultOptions{fieldLabelModifier=drop 1} ''Parameters)
