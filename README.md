@@ -1,3 +1,3 @@
 # Typed-MLP
 
-This work is still in progress
+A depentently type MLP network with Back Propagation learning
