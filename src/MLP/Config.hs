@@ -1,13 +1,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module MLP.Config (
    readConf,
-   mkDataSet,
-   mkState
+   mkDataSet
 ) where
 
 import Data.Aeson (eitherDecode)
@@ -15,7 +13,7 @@ import Numeric.LinearAlgebra.Data (loadMatrix, (><), Matrix)
 import Numeric.LinearAlgebra.Static (create, L)
 import Control.Lens ((^.), foldlOf, (%~), (&))
 import MLP.DataSet (toPat, normPat)
-import MLP.Network (AllCon, build, Net, Learn)
+import MLP.Network (AllCon, Net, Learn, MLP)
 import MLP.Types (trainFile, 
                   testFile,
                   topology, 
@@ -23,13 +21,12 @@ import MLP.Types (trainFile,
                   topoFold,
                   DataSet(..), 
                   Parameters(..),
-                  Env(..),
                   State(..),
                   Topology,
                   MonadFileSystem(..))
 import Control.Monad ((=<<))
 import System.FilePath (splitFileName, takeFileName, (</>))
-import GHC.TypeLits (KnownNat)
+import GHC.TypeLits (KnownNat, Nat)
 import Control.Monad.Random.Class (MonadRandom)
 
 liftEither :: (MonadFail m) => Either String b -> m b
@@ -53,6 +50,3 @@ mkDataSet p = do
       return $ DataSet trainSet testSet
    where
       mkPat fl = readMatrixM fl >>= liftEither . toPat
-
-mkState :: forall i hs o m. (AllCon KnownNat (i ': o ': hs), MonadRandom m, Learn (Net i hs o)) => m (State i hs o)
-mkState = (\n -> State n 0 0) <$> build

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 82a68a079628b9a7d7b7d77dcb48f7d1cdd632e5c62bd2ed38cae90dfdb25c8d
+-- hash: 3d3ef9e0e4aa3b2b07cadb8459257bde9951e6d64ea3768e881f15928c834762
 
 name:           mlp-hs
 version:        0.1.0.0
@@ -30,6 +30,7 @@ library
       MLP.App
       MLP.Config
       MLP.DataSet
+      MLP.NatList
       MLP.Network
       MLP.Types
   other-modules:
@@ -42,6 +43,7 @@ library
     , aeson
     , base >=4.7 && <5
     , bytestring
+    , constraints
     , containers
     , filepath
     , first-class-families
@@ -68,6 +70,7 @@ executable mlp-hs-exe
     , aeson
     , base >=4.7 && <5
     , bytestring
+    , constraints
     , containers
     , filepath
     , first-class-families
@@ -96,6 +99,7 @@ test-suite mlp-hs-test
     , aeson
     , base >=4.7 && <5
     , bytestring
+    , constraints
     , containers
     , filepath
     , first-class-families

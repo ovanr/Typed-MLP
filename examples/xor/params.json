@@ -7,6 +7,7 @@
    "learningRate": 0.7,
    "decayLearningRate": true,
    "minErrorRate": 0.001,
+   "epochs": 1000,
    "normalise": false,
    "trainFile": "train.txt",
    "testFile": "test.txt",

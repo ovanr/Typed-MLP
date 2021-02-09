@@ -37,10 +37,10 @@ module MLP.Types (
    hiddenLayers,
    numOutputs,
    topoFold,
-   Env(..),
    dataSet,
    params,
    State(..),
+   network,
    curEpoch,
    curError,
    App(..),
@@ -57,7 +57,8 @@ import Data.Aeson.Lens (key, values, _Integral)
 import Data.Aeson.TH (deriveToJSON, defaultOptions, Options(..))
 import Control.Monad (guard)
 import Data.Maybe (fromMaybe)
-import Control.Monad.RWS.Lazy (RWS(..), runRWS)
+import Control.Monad.State.Lazy (StateT(..), runStateT)
+import Control.Monad.Writer.Lazy (Writer(..), runWriter)
 import qualified Data.Text.Lazy as T 
 import Data.Functor.Identity (Identity)
 import Data.Text.Lazy.Encoding (encodeUtf8, decodeUtf8)
@@ -75,7 +76,10 @@ import Numeric.Natural
 data Pattern (i :: Nat) (o :: Nat) = Pattern {
    _input :: R i,
    _output :: R o
-} deriving Generic
+}
+
+instance (KnownNat i, KnownNat o) => Show (Pattern i o) where
+   show (Pattern i o) = "Pattern " ++ show i ++ show o
 
 -- rank 2 function
 apply :: (forall n. R n -> R n -> R n) -> Pattern i o -> Pattern i o -> Pattern i o
@@ -101,17 +105,17 @@ instance Fractional (Pattern i o) where
 data DataSet i o = DataSet {
    _trainSet :: [Pattern i o],
    _testSet :: [Pattern i o]
-}
+} deriving Show
 
 data Topology = Topology {
    _numInputs :: Natural,
    _hiddenLayers :: [Natural],
    _numOutputs :: Natural
-}
+} deriving Show
 
 data Parameters = Parameters {
    _topology :: Topology,
-   _learningRate :: Float,
+   _learningRate :: Double,
    _decayLearningRate :: Bool,
    _epochs :: Natural,
    _minErrorRate :: Double,
@@ -119,14 +123,11 @@ data Parameters = Parameters {
    _trainFile :: FilePath,
    _testFile :: FilePath,
    _verbose :: Bool
-}
-
-data Env i o = Env {
-   _dataSet :: DataSet i o,
-   _params :: Parameters
-}
+} deriving Show
 
 data State i hs o = State {
+   _dataSet :: DataSet i o,
+   _params :: Parameters,
    _network :: Net i hs o,
    _curEpoch :: Natural,
    _curError :: Double
@@ -140,19 +141,17 @@ topoFold :: Fold Topology Natural
 topoFold = folding $ \s -> (s ^. numInputs) : (s ^. hiddenLayers) ++ (s ^.. numOutputs)
 
 makeLenses ''Parameters
-makeLenses ''Env
 makeLenses ''State
 
-newtype App i hs o a = App { unApp :: RWS (Env i o) T.Text (State i hs o) a }
+newtype App i hs o a = App { unApp :: StateT (State i hs o) (Writer T.Text) a }
    deriving (Functor, 
              Applicative, 
              Monad,
-             MonadReader (Env i o), 
-             MonadWriter T.Text, 
+             MonadWriter T.Text,
              MonadState (State i hs o))
 
-runApp :: App i hs o a -> Env i o -> State i hs o -> (a, State i hs o, T.Text)
-runApp = runRWS . unApp
+runApp :: App i hs o a -> State i hs o -> ((a, State i hs o), T.Text)
+runApp app = runWriter . runStateT (unApp app)
 
 class (Monad m) => MonadFileSystem m where
    readFileM :: FilePath -> m B.ByteString

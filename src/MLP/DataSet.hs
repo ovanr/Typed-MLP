@@ -27,7 +27,7 @@ toPat m
    where
       [dimI, dimO] = map fromIntegral . fromSing $ sing @'[i,o]
       is = mapMaybe create . toRows . takeColumns dimI $ m
-      os = mapMaybe create . toRows . dropColumns dimO $ m
+      os = mapMaybe create . toRows . dropColumns dimI $ m
 
 
 normPat :: forall i o. (KnownNat i, KnownNat o) => [Pattern i o] -> [Pattern i o]

@@ -36,6 +36,7 @@ dependencies:
 - first-class-families
 - singletons
 - MonadRandom
+- constraints
 
 library:
   source-dirs: src

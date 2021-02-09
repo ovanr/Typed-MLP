@@ -15,26 +15,36 @@
 module MLP.Network (
    AllCon,
    ArrList(..),
+   arrLast,
    Weights(..),
    Net(..),
    scalarR,
    scalarL,
    MLP(..),
-   Learn(..)
+   Learn(..),
+   NetInstance
 ) where
 
-import Data.Proxy
 import GHC.TypeLits
-import Numeric.LinearAlgebra.Static hiding (build)
+import Numeric.LinearAlgebra.Static hiding (create)
 import Fcf
-import Fcf.Data.List (Snoc)
+import Fcf.Data.List (Snoc, Last)
 import Data.Singletons
 import Data.Kind (Constraint, Type)
 import Control.Monad.Random.Class (MonadRandom(..))
+import Numeric.Natural
+import Unsafe.Coerce
+import Data.Proxy
 
 type family AllCon (f :: k -> Constraint) (ks :: [k]) :: Constraint where
    AllCon _1 '[] = () :: Constraint
    AllCon f (k ': ks) = (f k, AllCon f ks) :: Constraint
+
+arrLast :: forall (o :: Nat) (e :: Nat -> Type) (a :: [Nat]). (AllCon KnownNat a, KnownNat o) => ArrList e a -> Maybe (e o)
+arrLast (Cons (a :: e o1) Nil) 
+         | natVal (Proxy @o1) == natVal (Proxy @o) = Just (unsafeCoerce a)
+arrLast (Cons a as@(Cons _ _)) = arrLast as
+arrLast _ = Nothing
 
 data ArrList (e :: Nat -> Type) (a :: [Nat]) where
    Nil :: ArrList e '[]
@@ -48,9 +58,9 @@ data Weights (i :: Nat) (o :: Nat) = Weights {
 rndWeights :: (KnownNat i, KnownNat o, MonadRandom m) => m (Weights i o)
 rndWeights = do
    (s1,s2) <- (,) <$> getRandom <*> getRandom
-      
+
    let w = uniformSample s1 (-1) 1
-       b = unrow $ uniformSample s2 (-1) 1      
+       b = unrow $ uniformSample s2 (-1) 1
        
    pure (Weights w b)
 
@@ -79,93 +89,105 @@ class MLP a where
    type DimO a :: Nat
    type Layer a :: Nat -> Nat -> Type
 
-   topo :: SingI (Topo a) => a -> [Integer]
-   topo _ = map fromIntegral . fromSing $ sing @(Topo a)
+   topo :: SingI (Topo a) => [Natural]
+   topo = fromSing $ sing @(Topo a)
 
-   mkOut :: (KnownNat i, KnownNat o) 
+   layerOut :: (KnownNat i, KnownNat o) 
             => Layer a i o -> Arr a i -> Arr a o
    
-   layerUpd :: (KnownNat i, KnownNat o) 
+   newLayer :: (KnownNat i, KnownNat o) 
                => Double -> Arr a i -> Arr a o -> Layer a i o -> Layer a i o
 
-class MLP a => Learn a where
-   build :: MonadRandom m => m a
+   netError :: Arr a (DimO a) -> Arr a (DimO a) -> Double
 
-   mkDeltas :: Arr a (DimI a) -> Arr a (DimO a) -> a -> 
-               ArrList (Arr a) (Topo a)
-   netUpd :: Double -> Arr a (DimI a) -> ArrList (Arr a) (Topo a) -> a -> a
+class MLP a => Learn a where
+   create :: MonadRandom m => m a
+
+   netOut :: Arr a (DimI a) -> a -> ArrList (Arr a) (Topo a)
+
+   mkDeltas :: ArrList (Arr a) (Topo a) -> Arr a (DimO a) -> a -> ArrList (Arr a) (Topo a)
+   
+   newNet :: Double -> Arr a (DimI a) -> ArrList (Arr a) (Topo a) -> ArrList (Arr a) (Topo a) -> a -> a
 
 instance AllCon KnownNat (i ': o ': hs)
          => MLP (Net i hs o) where
    
-   type Topo (Net i hs o) = Eval (Snoc hs o)
-   type Arr (Net i hs o) = R
-   type DimI (Net i hs o) = i
-   type DimO (Net i hs o) = o
+   type Topo  (Net i hs o) = Eval (Snoc hs o)
+   type Arr   (Net i hs o) = R
+   type DimI  (Net i hs o) = i
+   type DimO  (Net i hs o) = o
    type Layer (Net i hs o) = Weights
 
-   mkOut :: (KnownNat w, KnownNat n) => Weights w n -> R w -> R n
-   mkOut l i = inputs l #> i
+   layerOut :: (KnownNat w, KnownNat n) => Weights w n -> R w -> R n
+   layerOut l i = (inputs l #> i) + bias l
 
-   layerUpd :: (KnownNat w, KnownNat n)
+   newLayer :: (KnownNat w, KnownNat n)
                => Double -> R w -> R n -> Weights w n -> Weights w n
-   layerUpd lr i err l = Weights (w * delta) (b * err)
+   newLayer lr i delta l = Weights (w * errW * scalarL lr) (b * delta * scalarR lr)
       where
-         delta = scalarL lr * (err `outer` i)
          w = inputs l
          b = bias l
+         errW = delta `outer` i
 
- 
+   netError :: KnownNat o => R o -> R o -> Double
+   netError expOut actOut = 1 <·> ((expOut - actOut) ** 2) / 2
+
+-- this dummy type can be used for helping to find the correct MLP instance
+-- in functions layerOut, newLayer
+type NetInstance = Net 0 '[] 0
+
 instance (KnownNat i, KnownNat o)
          => Learn (Net i '[] o) where
 
-   build :: MonadRandom m => m (Net i '[] o)
-   build = SLayer <$> rndWeights
+   create :: MonadRandom m => m (Net i '[] o)
+   create = SLayer <$> rndWeights
 
-   mkDeltas :: R i -> R o -> Net i '[] o -> ArrList R '[o]
-   mkDeltas i o (SLayer l) = Cons (dsn * dso) Nil 
+   netOut :: R i -> Net i '[] o -> ArrList R '[o]
+   netOut i (SLayer l) = Cons (layerOut @NetInstance l i) Nil
+
+   mkDeltas :: ArrList R '[o] -> R o -> Net i '[] o -> ArrList R '[o]
+   mkDeltas (Cons lo Nil) expOut (SLayer l) = Cons (dsn * dso) Nil
       where
-         lo = mkOut @(Net i '[] o) l i
          dsn = lo * (1 - lo)
-         dso = lo - o
+         dso = lo - expOut
 
-   netUpd :: Double -> R i -> ArrList R '[o] -> Net i '[] o 
-             -> Net i '[] o
-   netUpd lr i (Cons delta _) (SLayer l) = SLayer (mkLayer lr i delta l)
-      where
-         mkLayer = layerUpd @(Net i '[] o)
+   newNet :: Double -> R i -> ArrList R '[o] -> ArrList R '[o] -> Net i '[] o -> Net i '[] o
+   newNet lr i (Cons delta _) _ (SLayer l) = SLayer (newLayer @NetInstance lr i delta l)
 
 instance (AllCon KnownNat (i ': o ': h ': hs),
          Learn (Net h hs o))
          => Learn (Net i (h ': hs) o) where
 
-   build :: forall i h hs o m. (MonadRandom m, KnownNat i, KnownNat h, Learn (Net h hs o)) => m (Net i (h ': hs) o)
-   build = MLayers <$> (rndWeights @i @h) <*> build @(Net h hs o)
+   create :: forall i h hs o m. (MonadRandom m, KnownNat i, KnownNat h, Learn (Net h hs o)) => m (Net i (h ': hs) o)
+   create = MLayers <$> (rndWeights @i @h) <*> create @(Net h hs o)
 
-   mkDeltas :: R i -> R o -> Net i (h ': hs) o
-               -> ArrList R (Topo (Net i (h ': hs) o))
-   mkDeltas i o (MLayers l nxt) = 
+   netOut :: hhs ~ (h ': hs) => R i -> Net i hhs o -> ArrList R (Topo (Net i hhs o))
+   netOut i (MLayers l n) = Cons lo (netOut lo n)
+      where
+         lo = layerOut @NetInstance l i
+
+   mkDeltas :: hhs ~ (h ': hs) => ArrList R (Topo (Net i hhs o)) -> R o -> Net i hhs o
+               -> ArrList R (Topo (Net i hhs o))
+   mkDeltas (Cons lo lor) expOut (MLayers l nxt) =
       case nxt of
-         SLayer lnxt -> let dd@(Cons d _) = mkDeltas lo o nxt 
+         SLayer lnxt -> let dd@(Cons d _) = mkDeltas lor expOut nxt 
                             dso = tr (inputs lnxt) #> d
                           in Cons (dsn * dso) dd
          
-         MLayers lnxt _ -> let dd@(Cons d _) = mkDeltas lo o nxt 
+         MLayers lnxt _ -> let dd@(Cons d _) = mkDeltas lor expOut nxt 
                                dso = tr (inputs lnxt) #> d
                              in Cons (dsn * dso) dd
       where
-         lo = mkOut @(Net i '[] o) l i
          dsn = lo * (1 - lo)
 
-   
-   netUpd :: Double -> R i -> ArrList R (Topo (Net i (h ': hs) o)) 
-             -> Net i (h ': hs) o -> Net i (h ': hs) o
-   netUpd lr i (Cons delta dr) (MLayers l n) =
-      MLayers (mkLayer lr i delta l) (netUpd lr lo dr n) 
-
-      where
-         mkLayer = layerUpd @(Net i '[] o)
-         lo = mkOut @(Net i '[] o) l i
+   newNet :: Double -> 
+             R i ->
+             ArrList R (Topo (Net i (h ': hs) o)) ->
+             ArrList R (Topo (Net i (h ': hs) o)) ->
+             Net i (h ': hs) o ->
+             Net i (h ': hs) o
+   newNet lr i (Cons d ds) (Cons lo los) (MLayers l n) =
+      MLayers (newLayer @NetInstance lr i d l) (newNet lr lo ds los n)
 
 
 layer1 :: Weights 2 3
