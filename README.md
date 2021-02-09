@@ -1,3 +1,3 @@
 # Typed-MLP
 
-A depentently type MLP network with Back Propagation learning
+A dependently type MLP network with Back Propagation learning
