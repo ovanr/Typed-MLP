@@ -14,6 +14,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TupleSections #-}
 
 module MLP.Types (
    Pattern(..),
@@ -44,7 +46,6 @@ module MLP.Types (
    curEpoch,
    curError,
    App(..),
-   runApp,
    zipWithPat,
    MonadFileSystem(..)
 )  where
@@ -59,7 +60,7 @@ import Control.Monad (guard)
 import Data.Maybe (fromMaybe)
 import Control.Monad.State.Lazy (StateT(..), runStateT)
 import Control.Monad.Writer.Lazy (Writer(..), runWriter)
-import qualified Data.Text.Lazy as T 
+import qualified Data.Text as T 
 import Data.Functor.Identity (Identity)
 import Data.Text.Lazy.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.ByteString.Lazy as B
@@ -69,7 +70,7 @@ import GHC.TypeLits ( KnownNat, Nat )
 import MLP.Network (Net(..), AllCon, Learn(..), MLP(..))
 import Data.Singletons (SingI(..))
 import Numeric.Natural ( Natural )
-import qualified Data.Text.Lazy.IO as TIO (putStrLn)
+import qualified Data.Text.IO as TIO (putStrLn)
 
 data Pattern (i :: Nat) (o :: Nat) = Pattern {
    _input :: R i,
@@ -123,7 +124,7 @@ data Parameters = Parameters {
 data State i hs o = State {
    _dataSet :: DataSet i o,
    _params :: Parameters,
-   _network :: Net i hs o,
+   _network :: !(Net i hs o),
    _curEpoch :: Natural,
    _curError :: Double
 }
@@ -138,16 +139,52 @@ topoFold = folding $ \s -> (s ^. numInputs) : (s ^. hiddenLayers) ++ (s ^.. numO
 makeLenses ''Parameters
 makeLenses ''State
 
+type Log = [T.Text]
 newtype App (i :: Nat) (hs :: [Nat]) (o :: Nat) (a :: *) = App {
-   unApp :: StateT (State i hs o) (Writer T.Text) a 
-} deriving (Functor,
-            Applicative,
-            Monad,
-            MonadWriter T.Text,
-            MonadState (State i hs o))
+   runApp ::  State i hs o -> ((a, State i hs o), Log)
+}
 
-runApp :: App i hs o a -> State i hs o -> ((a, State i hs o), T.Text)
-runApp app = runWriter . runStateT (unApp app)
+instance Functor (App i hs o) where
+   fmap f (App app) = 
+      App $ \s ->
+         let ((!a,!s'),!l) = app s
+            in ((f a,s'),l)
+
+instance Applicative (App i hs o) where
+   pure a = App $ \s -> ((a,s), mempty)
+
+   (App fab) <*> (App fa) =
+      App $ \s ->
+         let ((!ab,!s'),!l) = fab s
+             ((a, s''), l') = fa s'
+            in ((ab a, s''), l <> l')
+
+instance Monad (App i hs o) where
+   return = pure 
+
+   (App ma) >>= amb =
+      App $ \s ->
+         let ((!a, !s'), !l) = ma s
+             ((b, s''), l') = runApp (amb a) s'
+            in ((b, s''), l <> l')
+
+instance MonadWriter Log (App i hs o) where
+   writer (!a, !l) = App $ \s -> ((a,s),l)
+   tell !l = App $ \s -> (((),s),l)
+   listen (App app) =
+      App $ \s ->
+         let ((!a,!s''),!l) = app s 
+            in (((a,l),s''),l)
+
+   pass (App app) = 
+      App $ \s ->
+         let (((!a,!f),!s'),!l) = app s 
+            in ((a,s'),l)
+
+instance MonadState (State i hs o) (App i hs o) where
+   get = App $ \s -> ((s,s),mempty)
+   put s = App . const $ (((), s), mempty)
+   state app = App ((,mempty).app)
 
 class (Monad m, MonadFail m) => MonadFileSystem m where
    readFileM :: FilePath -> m B.ByteString

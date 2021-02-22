@@ -96,7 +96,7 @@ run conf = do
    let st = State dt conf net 0 0
        ((a, st'),log) = runApp train st
 
-   printText log
+   mapM_ printText log
 
 trainOnSet :: forall i o hs. NetConstraints i hs o => App i hs o Double
 trainOnSet = do
@@ -117,13 +117,13 @@ trainOnSet = do
       -- tell [fmt| \n ==> Deltas {deltas:s} \n |]
       -- tell [fmt| \n ==> Expected Output {o:s} \n |]
       -- tell [fmt| \n ==> Actual Output {actOut:s} \n |]
-      tell [fmt| \n Network Dump \n {net:s} \n|]
+      -- tell [fmt| \n Network Dump \n {net:s} \n|]
 
       return err
 
    let totalErr = sum errorRates / fromIntegral (length trainset)
 
-   tell [fmt| \n ==> Epoch Train Error {totalErr:f} \n |]
+   tell [[fmt| \n ==> Epoch Train Error {totalErr:f} \n |]]
 
    return totalErr
 
@@ -144,7 +144,7 @@ evaluateOnSet = do
    let totalErr = sum errorRates / fromIntegral (length testset)
    curError .= totalErr
 
-   tell [fmt| \n ==> Epoch Test Error {totalErr:f} \n |]
+   tell [[fmt| \n ==> Epoch Test Error {totalErr:f} \n |]]
 
    return totalErr
 
@@ -164,12 +164,12 @@ loop trainAction = do
 
 train :: NetConstraints i hs o => App i hs o ()
 train = do
-   tell "Starting Training process...\n"
+   tell ["Starting Training process...\n"]
 
    loop $ do
       epoch <- use curEpoch
 
-      tell [fmt| \n ==> Epoch {epoch:d} \n |]
+      tell [[fmt| \n ==> Epoch {epoch:d} \n |]]
       
       trainOnSet
       evaluateOnSet

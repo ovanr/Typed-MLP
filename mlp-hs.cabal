@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 6c70ee6d3bb8a9c0c4d6a8c88bbfa1301382525fe15d18e73b5c271d51d2439a
+-- hash: 825d84516e8ed5db532bf3bb2bb54f2cc2b64525c6965655232a05e271edcf9d
 
 name:           mlp-hs
 version:        0.1.0.0
@@ -65,7 +65,7 @@ executable mlp-hs
       Paths_mlp_hs
   hs-source-dirs:
       app
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       MonadRandom
     , PyF

@@ -70,8 +70,8 @@ instance Show (ArrList e a) where
 
 
 data Weights (i :: Nat) (o :: Nat) = Weights {
-   inputs :: L o i,
-   bias :: R o
+   inputs :: !(L o i),
+   bias :: !(R o)
 }
 
 instance (KnownNat i, KnownNat  o) => Show (Weights i o) where
@@ -87,8 +87,8 @@ rndWeights = do
    pure (Weights w b)
 
 data Net (i :: Nat) (hs :: [Nat]) (o :: Nat) where
-   SLayer :: Weights i o -> Net i '[] o
-   MLayers :: Weights i h -> Net h hs o -> Net i (h ': hs) o
+   SLayer :: !(Weights i o) -> Net i '[] o
+   MLayers :: !(Weights i h) -> !(Net h hs o) -> Net i (h ': hs) o
 
 instance AllCon KnownNat (i ': o ': hs) => Show (Net i hs o) where
    show (SLayer l) = "SLayer ->" ++ show l ++ "\n"
