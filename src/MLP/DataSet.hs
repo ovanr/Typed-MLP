@@ -11,6 +11,7 @@ module MLP.DataSet (
 import Numeric.LinearAlgebra.Data (cols, Matrix, R, takeColumns, dropColumns, toRows)
 import Numeric.LinearAlgebra.Static (create, zipWithVector)
 import MLP.Types (Pattern(..), Topology(..), zipWithPat)
+import MLP.Network (scalarR)
 import qualified Data.Vector.Storable as V
 import qualified Data.Text as T
 import Control.Monad (when)
@@ -32,7 +33,9 @@ toPat m
 
 normPat :: forall i o. (KnownNat i, KnownNat o) => [Pattern i o] -> [Pattern i o]
 normPat [] = []
-normPat xxs@(x:xs) = map (\p -> (p - minp) / (maxp - minp)) xxs
+normPat xxs@(x:xs) = map (\p -> (p - minp) / scalep) xxs
    where
+      zeroPat = Pattern (scalarR 0) (scalarR 0)
       minp = foldl (zipWithPat min) x xs
       maxp = foldl (zipWithPat max) x xs
+      scalep = zipWithPat max zeroPat (maxp - minp)

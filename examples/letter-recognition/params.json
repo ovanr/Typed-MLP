@@ -1,14 +1,14 @@
 {
    "topology": {
       "numInputs": 16,
-      "hiddenLayers": [100],
+      "hiddenLayers": [30],
       "numOutputs": 26
    },
    "learningRate": 0.8,
    "decayLearningRate": true,
    "minErrorRate": 0.001,
-   "epochs": 200,
-   "normalise": false,
+   "epochs": 100,
+   "normalise": true,
    "trainFile": "train.txt",
    "testFile": "test.txt"
 }

@@ -140,8 +140,10 @@ makeLenses ''Parameters
 makeLenses ''State
 
 type Log = [T.Text]
+
 newtype App (i :: Nat) (hs :: [Nat]) (o :: Nat) (a :: *) = App {
-   runApp ::  State i hs o -> ((a, State i hs o), Log)
+   -- | this is an unpacked StateT (StateT i hs o) (Writer Log) a
+   runApp :: State i hs o -> ((a, State i hs o), Log)
 }
 
 instance Functor (App i hs o) where
